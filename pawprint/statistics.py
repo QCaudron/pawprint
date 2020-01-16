@@ -34,8 +34,10 @@ class Statistics(object):
         if clean:
             stats.drop_table()
 
-        # Determine whether the stats table exists and contains data, or if we should create one
-        try:  # if this passes, the table exists and may contain data
+        # This try statement contains a few SQL queries; if any of them fail with a
+        # ProgrammingError, the try is exited and the sessions will be rebuilt from scratch.
+        try:
+            # try to get the last session; if the query fails, sessions built from scratch
             last_entry = pd.read_sql(
                 "SELECT last_timestamp FROM {} ORDER BY last_timestamp DESC LIMIT 1".format(
                     stats.table
@@ -43,13 +45,10 @@ class Statistics(object):
                 self.tracker.db,
             ).loc[0, "last_timestamp"]
 
-            print("last_entry type:", type(last_entry))
-
             # construct query for unique users since last data
             user_query = "SELECT DISTINCT({}) FROM {} WHERE {} > %(last_entry)s".format(
                 self.tracker.user_field, self.tracker.table, self.tracker.timestamp_field
             )
-            print("users since last data query: ", user_query)
 
             params = {"last_entry": str(last_entry)}
 
@@ -58,10 +57,8 @@ class Statistics(object):
                 self.tracker.user_field
             ].values
 
-            print("unique users: ", unique_users)
-
             if len(unique_users) == 0:
-                return  # if no users, exit
+                return  # if no users, exit because nothing to update
 
             unique_user_str = "('" + "','".join([str(user) for user in unique_users]) + "')"
 
@@ -77,10 +74,7 @@ class Statistics(object):
                 self.tracker.db,
             )
 
-            print("last sessions: \n", last_sessions)
-            print("data type of events: ", type(last_sessions["events"][0]))
-
-            # create UserCurrentSession() from last session
+            # create UserCurrentSession() from last session of each unique user
             for _, session in last_sessions.iterrows():
                 existing_session = UserCurrentSession(
                     user_id=session["user_id"],
@@ -91,41 +85,34 @@ class Statistics(object):
 
                 open_sessions.current_sessions[session["user_id"]] = existing_session
 
+            # get user and timestamp values to user in DELETE query
             rows_to_delete = zip(last_sessions["user_id"].values, last_sessions["timestamp"].values)
-            # print("rows to delete: ", *rows_to_delete)
-            # TODO: duplicate records are not being overwritten
+
             # delete last recorded sessions from table
             try:
                 for user, time in rows_to_delete:
-                    print("user: ", user)
-                    time = pd.Timestamp(time)
-                    print("time: ", time)
-                    print("time type: ", type(time))
+                    time = pd.Timestamp(time)  # convert from numpy.datetime64 to pd.Timestamp
                     delete_session_query = "DELETE FROM {} WHERE {} = '{}' AND {} = '{}'".format(
                         stats.table, self.tracker.user_field, user, self.tracker.timestamp_field, time
                     )
-                    print("delete session query: ", delete_session_query)
                     pd.io.sql.execute(delete_session_query, con=self.tracker.engine)
             except ProgrammingError:
-                print("you got an error!")
+                raise
 
-        except ProgrammingError:  # otherwise, the table doesn't exist
+        except ProgrammingError:  # raised when some query above fails; triggers full session rebuild
             last_entry = datetime(1900, 1, 1)
             params = {"last_entry": str(last_entry)}
 
-        # get events since last_timestamp of all sessions
-        event_query = "SELECT * FROM {}  WHERE {} > %(last_entry)s".format(
+        # query for all events since most recent session last_timestamp
+        event_query = "SELECT * FROM {} WHERE {} > %(last_entry)s".format(
             self.tracker.table, self.tracker.timestamp_field
         )
 
-        # Pull the time-series
+        # get events since last_timestamp of all sessions
         events = pd.read_sql(event_query, self.tracker.db, params=params)
 
-        # for event in events
-        # add event: current_session.add_event()
-
-        for _, event_row in events.iterrows():
-            open_sessions.add_event(
+        for _, event_row in events.iterrows():  # loop through events
+            open_sessions.add_event(            # add events to Sessions()
                 user_id=event_row["user_id"],
                 timestamp=event_row["timestamp"],
                 events=event_row["event"],
