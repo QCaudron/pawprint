@@ -132,108 +132,94 @@ def test_sessions_clean_equals_true_resets(pawprint_default_statistics_tracker):
     assert len(stats["sessions"].read()) == 7
 
 
-# def test_engagement_metrics(pawprint_default_statistics_tracker):
-#     """Test the calculation of user engagement metrics."""
+def test_engagement_metrics(pawprint_default_statistics_tracker):
+    """Test the calculation of user engagement metrics."""
 
-#     tracker = pawprint_default_statistics_tracker
-#     stats = pawprint.Statistics(tracker)
+    tracker = pawprint_default_statistics_tracker
+    stats = pawprint.Statistics(tracker)
 
-#     # Calculate user engagement
-#     stats.sessions()
-#     stats.engagement(min_sessions=0)
+    # Calculate user engagement
+    stats.sessions()
+    stats.engagement(min_sessions=0)
 
-#     # Read the results
-#     stickiness = stats["engagement"].read()
+    # Read the results
+    stickiness = stats["engagement"].read()
 
-#     # Expected values
-#     dau = np.array([2, 1])
-#     wau = np.array([2, 2])
-#     mau = np.array([2, 2])
-#     engagement = np.array([1, 0.5])
+    # Expected values
+    dau = np.array([2, 1])
+    wau = np.array([2, 2])
+    mau = np.array([2, 2])
+    engagement = np.array([1, 0.5])
 
-#     assert np.all(stickiness.dau == dau)
-#     assert np.all(stickiness.wau == wau)
-#     assert np.all(stickiness.mau == mau)
-#     assert np.all(stickiness.engagement == engagement)
-#     assert set(stickiness.columns) == {"timestamp", "dau", "wau", "mau", "engagement"}
-
-
-# def test_engagement_min_sessions(pawprint_default_statistics_tracker):
-
-#     tracker = pawprint_default_statistics_tracker
-#     stats = pawprint.Statistics(tracker)
-#     stats.sessions()
-
-#     # Now test with a minimum number of sessions
-#     stats.engagement(min_sessions=2)
-#     stickiness = stats["engagement"].read()
-
-#     # Ground truth
-#     active = np.array([1, 1])
-#     engagement_active = np.array([1, 1])
-#     dau = np.array([2, 1])
-
-#     assert np.all(stickiness.dau_active == active)
-#     assert np.all(stickiness.wau_active == active)
-#     assert np.all(stickiness.mau_active == active)
-#     assert np.all(stickiness.dau == dau)
-#     assert np.all(stickiness.engagement_active == engagement_active)
-#     assert set(stickiness.columns) == {
-#         "timestamp",
-#         "dau",
-#         "wau",
-#         "mau",
-#         "engagement",
-#         "dau_active",
-#         "wau_active",
-#         "mau_active",
-#         "engagement_active",
-#     }
-
-#     # Test that running engagements again doesn't error if there's no new data
-#     stats.engagement()
+    assert np.all(stickiness.dau == dau)
+    assert np.all(stickiness.wau == wau)
+    assert np.all(stickiness.mau == mau)
+    assert np.all(stickiness.engagement == engagement)
+    assert set(stickiness.columns) == {"timestamp", "dau", "wau", "mau", "engagement"}
 
 
-# def test_engagement_too_many_min_sessions(pawprint_default_statistics_tracker):
-#     tracker = pawprint_default_statistics_tracker
-#     stats = pawprint.Statistics(tracker)
-#     stats.sessions()
+def test_engagement_min_sessions(pawprint_default_statistics_tracker):
 
-#     # Test with too large a minimum sessions parameter
-#     stats.engagement(min_sessions=20)
-#     stickiness = stats["engagement"].read()
-#     assert len(stickiness) == 2
-#     assert set(stickiness.columns) == {"timestamp", "dau", "wau", "mau", "engagement"}
+    tracker = pawprint_default_statistics_tracker
+    stats = pawprint.Statistics(tracker)
+    stats.sessions()
+
+    # Now test with a minimum number of sessions
+    stats.engagement(min_sessions=2)
+    stickiness = stats["engagement"].read()
+
+    # Ground truth
+    active = np.array([1, 1])
+    engagement_active = np.array([1, 1])
+    dau = np.array([2, 1])
+
+    assert np.all(stickiness.dau_active == active)
+    assert np.all(stickiness.wau_active == active)
+    assert np.all(stickiness.mau_active == active)
+    assert np.all(stickiness.dau == dau)
+    assert np.all(stickiness.engagement_active == engagement_active)
+    assert set(stickiness.columns) == {
+        "timestamp",
+        "dau",
+        "wau",
+        "mau",
+        "engagement",
+        "dau_active",
+        "wau_active",
+        "mau_active",
+        "engagement_active",
+    }
+
+    # Test that running engagements again doesn't error if there's no new data
+    stats.engagement()
 
 
-# def test_engagement_append_mode(pawprint_default_statistics_tracker):
-#     tracker = pawprint_default_statistics_tracker
-#     stats = pawprint.Statistics(tracker)
-#     stats.sessions()
+def test_engagement_too_many_min_sessions(pawprint_default_statistics_tracker):
+    tracker = pawprint_default_statistics_tracker
+    stats = pawprint.Statistics(tracker)
+    stats.sessions()
 
-#     stats.engagement(min_sessions=20)
-
-#     # Try again with append-only
-#     stats.engagement(clean=False)
-#     stickiness = stats["engagement"].read()
-#     assert len(stickiness.columns) == 5
-#     assert len(stickiness) == 2
-
-#     stats.engagement(clean=True, min_sessions=2)
-#     stickiness = stats["engagement"].read()
-#     assert len(stickiness) == 2
-#     assert len(stickiness.columns) == 9
+    # Test with too large a minimum sessions parameter
+    stats.engagement(min_sessions=20)
+    stickiness = stats["engagement"].read()
+    assert len(stickiness) == 2
+    assert set(stickiness.columns) == {"timestamp", "dau", "wau", "mau", "engagement"}
 
 
-# def test_event_session_map_table_created(pawprint_default_statistics_tracker):
-#     tracker = pawprint_default_statistics_tracker
-#     stats = pawprint.Statistics(tracker)
-#     stats.sessions()
+def test_engagement_append_mode(pawprint_default_statistics_tracker):
+    tracker = pawprint_default_statistics_tracker
+    stats = pawprint.Statistics(tracker)
+    stats.sessions()
 
-#     map_df = stats["event_session_map"].read()
+    stats.engagement(min_sessions=20)
 
-#     assert len(map_df) == len(tracker.read())
-#     assert all(
-#         col in map_df.columns for col in ["event_id", "user_id", "timestamp", "session_timestamp"]
-#     )
-#     assert map_df["timestamp"].max() >= map_df["session_timestamp"].max()
+    # Try again with append-only
+    stats.engagement(clean=False)
+    stickiness = stats["engagement"].read()
+    assert len(stickiness.columns) == 5
+    assert len(stickiness) == 2
+
+    stats.engagement(clean=True, min_sessions=2)
+    stickiness = stats["engagement"].read()
+    assert len(stickiness) == 2
+    assert len(stickiness.columns) == 9
