@@ -97,7 +97,7 @@ def statistics_test_table_names():
         "tracker_table": "pawprint_test_statistics_table",
         "sessions_table": "pawprint_test_statistics_table__sessions",
         "engagement_table": "pawprint_test_statistics_table__engagement",
-        "event_session_map_table": "pawprint_test_statistics_table__event_session_map",
+        # "event_session_map_table": "pawprint_test_statistics_table__event_session_map",
     }
 
 
@@ -137,6 +137,25 @@ def pawprint_default_statistics_tracker(
         "Frodo",
     ]
 
+    events = [
+        "searched",
+        "walked",
+        "searched",
+        "searched",
+        "walked",
+        "met_wizard",
+        "met_hobbit",
+        "cast_spell",
+        "cried",
+        "disappeared",
+        "appeared",
+        "fought",
+        "hid",
+        "fought",
+        "walked",
+        "walked",
+    ]
+
     # List of times ( minutes ) between any event and the first events
     timedeltas = [0, 1, 2, 3, 4, 5, 100, 110, 120, 130, 140, 1000, 1001, 1002, 1003, 1004]
 
@@ -149,8 +168,8 @@ def pawprint_default_statistics_tracker(
     yesterday = datetime(today.year, today.month, today.day, 9, 0) - timedelta(days=1)
 
     # Write all events
-    for user, delta in zip(users, timedeltas):
-        tracker.write(user_id=user, timestamp=yesterday + timedelta(minutes=delta))
+    for user, delta, event in zip(users, timedeltas, events):
+        tracker.write(user_id=user, timestamp=yesterday + timedelta(minutes=delta), event=event)
 
     # Save the tracker
     return tracker

@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
-from datetime import timedelta
+from datetime import datetime, timedelta
 from sqlalchemy.exc import ProgrammingError
 
-from pawprint import Tracker
+from pawprint import Tracker, Sessions, UserCurrentSession
 
 
 class Statistics(object):
@@ -21,117 +21,113 @@ class Statistics(object):
 
         return Tracker(db=self.tracker.db, table="{}__{}".format(self.tracker.table, tracker))
 
-    def sessions(self, duration=30, clean=False, event_id_col="id"):
+    def sessions(self, duration=30, clean=False):
         """Create a table of user sessions."""
 
         # Create a tracker for basic interaction
         stats = self["sessions"]
 
-        # Create a tracker for mapping events to sessions
-        event_session_map = self["event_session_map"]
+        # initialize Sessions container
+        open_sessions = Sessions()
 
         # If we're starting clean, delete the table
         if clean:
             stats.drop_table()
-            event_session_map.drop_table()
 
         # Determine whether the stats table exists and contains data, or if we should create one
         try:  # if this passes, the table exists and may contain data
             last_entry = pd.read_sql(
-                "SELECT timestamp FROM {} ORDER BY timestamp DESC LIMIT 1".format(
-                    event_session_map.table
+                "SELECT last_timestamp FROM {} ORDER BY last_timestamp DESC LIMIT 1".format(
+                    stats.table
                 ),
                 self.tracker.db,
-            ).loc[0, "timestamp"]
+            ).loc[0, "last_timestamp"]
+
+            # construct query for unique users since last data
+            user_query = "SELECT DISTINCT({}) FROM {} WHERE {} > %(last_entry)s".format(
+                self.tracker.user_field, self.tracker.table, self.tracker.timestamp_field
+            )
+            print("users since last data query: ", user_query)
+
+            params = {"last_entry": str(last_entry)}
+
+            # Get the unique users since the last data we've tracked
+            unique_users = pd.read_sql(user_query, self.tracker.db, params=params)[
+                self.tracker.user_field
+            ].values
+
+            print("unique users: ", unique_users)
+
+            if len(unique_users) == 0:
+                return  # if no users, exit
+
+            unique_user_str = "('" + "','".join([str(user) for user in unique_users]) + "')"
+
+            # grab last recorded session for each user in unique users
+            last_sessions = pd.read_sql(
+                "SELECT DISTINCT ON ({}) * FROM {} WHERE {} IN {} ORDER BY {}, last_timestamp DESC".format(
+                    self.tracker.user_field,
+                    stats.table,
+                    self.tracker.user_field,
+                    unique_user_str,
+                    self.tracker.user_field,
+                ),
+                self.tracker.db,
+            )
+
+            print("last sessions: \n", last_sessions)
+            print("data type of events: ", type(last_sessions["events"][0]))
+
+            # create UserCurrentSession() from last session
+            for _, session in last_sessions.iterrows():
+                existing_session = UserCurrentSession(
+                    user_id=session["user_id"],
+                    start_time=session["timestamp"],
+                    events=session["events"],
+                    last_time=session["last_timestamp"],
+                )
+
+                open_sessions.current_sessions[session["user_id"]] = existing_session
+
+            rows_to_delete = zip(last_sessions["user_id"].values, last_sessions["timestamp"].values)
+            print("rows to delete: ", *rows_to_delete)
+            # TODO: duplicate records are not being overwritten
+            # delete last recorded sessions from table
+            for user, time in rows_to_delete:
+                delete_session_query = "DELETE FROM {} WHERE {} = {} AND {} = {}".format(
+                    stats.table, self.tracker.user_field, user, self.tracker.timestamp_field, time
+                )
+                print("delete session query: ", delete_session_query)
+                pd.io.sql.execute(delete_session_query, self.tracker.engine)
+
         except ProgrammingError:  # otherwise, the table doesn't exist
-            last_entry = None
+            last_entry = datetime(1900, 1, 1)
+            params = {"last_entry": str(last_entry)}
 
-        # Query : what's the final time we have a session duration for ?
-        query = "SELECT DISTINCT({}) FROM {}".format(self.tracker.user_field, self.tracker.table)
-        if last_entry:
-            query += " WHERE {} > %(last_entry)s".format(self.tracker.timestamp_field)
-        params = {"last_entry": str(last_entry)}
-
-        # Get the list of unique users since the last data we've tracked
-        users = pd.read_sql(query, self.tracker.db, params=params)[self.tracker.user_field].values
-
-        if len(users) == 0:
-            return
-
-        # Query : the timestamp and user for all events since the last recorded session start
-        query = "SELECT {}, {}, {} FROM {}".format(
-            event_id_col, self.tracker.user_field, self.tracker.timestamp_field, self.tracker.table
+        # get events since last_timestamp of all sessions
+        event_query = "SELECT * FROM {}  WHERE {} > %(last_entry)s".format(
+            self.tracker.table, self.tracker.timestamp_field
         )
-        if last_entry:
-            query += " WHERE {} > %(last_entry)s".format(self.tracker.timestamp_field)
 
         # Pull the time-series
-        events = pd.read_sql(query, self.tracker.db, params=params)
+        events = pd.read_sql(event_query, self.tracker.db, params=params)
 
-        # Session durations DataFrame
-        session_data = pd.DataFrame()
-        event_session_map_data = pd.DataFrame()
+        # for event in events
+        # add event: current_session.add_event()
 
-        # For each user, calculate session durations
-        for user in users:
-
-            # Get the user's time series
-            user_events = events[events[self.tracker.user_field] == user].sort_values(
-                self.tracker.timestamp_field
-            )
-            user_times = user_events[self.tracker.timestamp_field]
-
-            # Index the final elements of each session
-            time_between = user_times.diff()  # look at the time between events
-            time_between.iloc[0] = timedelta(minutes=0)  # fix NaT
-            final_events = np.where(time_between.dt.seconds / 60 > duration)[0]
-
-            # Identify times where the user has finished a session
-            # The zeroth "session" finished at -1; the last session finishes at the end
-            end = len(final_events)
-            breaks = np.insert(final_events, [0, end], [0, len(user_times)])
-
-            # Calculate session durations
-            user_durations = []
-            for i, j in zip(breaks[:-1], breaks[1:]):
-                user_durations.append((user_times.iloc[j - 1] - user_times.iloc[i]).seconds / 60)
-
-            # Write session durations to the DataFrame
-            user_session_data = pd.DataFrame(
-                {
-                    "timestamp": user_times.iloc[breaks[:-1]].values,
-                    "user_id": [user] * len(user_durations),
-                    "duration": user_durations,
-                    "total_events": np.diff(breaks),
-                }
+        for _, event_row in events.iterrows():
+            open_sessions.add_event(
+                user_id=event_row["user_id"],
+                timestamp=event_row["timestamp"],
+                events=event_row["event"],
             )
 
-            session_starts = user_session_data["timestamp"].sort_values()
-            session_ends = pd.concat(
-                [user_session_data["timestamp"].sort_values().iloc[1:], pd.Series(user_times.max())]
-            ).reset_index(drop=True)
-            session_idxs = np.searchsorted(
-                session_ends.sort_values(), user_events[self.tracker.timestamp_field]
-            )
-            user_events["session_timestamp"] = session_starts[session_idxs].values
-            event_session_map_data = event_session_map_data.append(
-                user_events.loc[:, ["id", "user_id", "timestamp", "session_timestamp"]],
-                ignore_index=True,
-            )
+        # close open sessions
+        open_sessions.close_open_sessions()
 
-            session_data = session_data.append(user_session_data, ignore_index=True)
-
-        # Write the session durations to the database
-        session_data[["timestamp", "user_id", "duration", "total_events"]].sort_values(
-            "timestamp"
-        ).to_sql(stats.table, stats.db, if_exists="append", index=False)
-
-        # Write event/session lookup table to the database
-        event_session_map_data = event_session_map_data.rename(columns={event_id_col: "event_id"})
-        event_session_map_data[
-            ["event_id", "user_id", "timestamp", "session_timestamp"]
-        ].sort_values("session_timestamp").to_sql(
-            event_session_map.table, event_session_map.db, if_exists="append", index=False
+        # write all (sorted) sessions to DB
+        open_sessions.write_to_db(
+            table=stats.table, db=self.tracker.db, if_exists="append", index=False
         )
 
     def engagement(self, clean=False, start=None, min_sessions=3):
