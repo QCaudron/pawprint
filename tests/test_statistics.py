@@ -79,8 +79,8 @@ def test_sessions_with_new_data(pawprint_default_statistics_tracker):
 
     # Expected values
     users = np.array(["Frodo", "Gandalf", "Frodo", "Frodo", "Sam", "Sauron", "Bilbo"])
-    durations = np.array([6, 40, 0, 4, 0, 0, 2])
-    events = np.array([7, 4, 1, 5, 1, 1, 3])
+    durations = np.array([5, 40, 0, 5, 0, 0, 2])
+    events = np.array([6, 4, 1, 6, 1, 1, 3])
 
     # calculate sessions again with new data
     stats.sessions(clean=False)

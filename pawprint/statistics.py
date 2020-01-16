@@ -43,6 +43,8 @@ class Statistics(object):
                 self.tracker.db,
             ).loc[0, "last_timestamp"]
 
+            print("last_entry type:", type(last_entry))
+
             # construct query for unique users since last data
             user_query = "SELECT DISTINCT({}) FROM {} WHERE {} > %(last_entry)s".format(
                 self.tracker.user_field, self.tracker.table, self.tracker.timestamp_field
@@ -90,15 +92,22 @@ class Statistics(object):
                 open_sessions.current_sessions[session["user_id"]] = existing_session
 
             rows_to_delete = zip(last_sessions["user_id"].values, last_sessions["timestamp"].values)
-            print("rows to delete: ", *rows_to_delete)
+            # print("rows to delete: ", *rows_to_delete)
             # TODO: duplicate records are not being overwritten
             # delete last recorded sessions from table
-            for user, time in rows_to_delete:
-                delete_session_query = "DELETE FROM {} WHERE {} = {} AND {} = {}".format(
-                    stats.table, self.tracker.user_field, user, self.tracker.timestamp_field, time
-                )
-                print("delete session query: ", delete_session_query)
-                pd.io.sql.execute(delete_session_query, self.tracker.engine)
+            try:
+                for user, time in rows_to_delete:
+                    print("user: ", user)
+                    time = pd.Timestamp(time)
+                    print("time: ", time)
+                    print("time type: ", type(time))
+                    delete_session_query = "DELETE FROM {} WHERE {} = '{}' AND {} = '{}'".format(
+                        stats.table, self.tracker.user_field, user, self.tracker.timestamp_field, time
+                    )
+                    print("delete session query: ", delete_session_query)
+                    pd.io.sql.execute(delete_session_query, con=self.tracker.engine)
+            except ProgrammingError:
+                print("you got an error!")
 
         except ProgrammingError:  # otherwise, the table doesn't exist
             last_entry = datetime(1900, 1, 1)
