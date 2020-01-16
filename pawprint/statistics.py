@@ -116,6 +116,7 @@ class Statistics(object):
                 user_id=event_row["user_id"],
                 timestamp=event_row["timestamp"],
                 events=event_row["event"],
+                duration=duration
             )
 
         # close open sessions

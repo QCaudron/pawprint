@@ -20,11 +20,11 @@ class UserCurrentSession:
         # else:
         #     self.events_in_session = [events]
 
-    def log(self, event_timestamp, events):
+    def log(self, event_timestamp, events, duration=30):
         # if new event within 30 min of last event for user,
         # update session end timestamp with this time and
         # add one to event count
-        if (event_timestamp - self.last_timestamp).seconds < 30 * 60:
+        if (event_timestamp - self.last_timestamp).seconds < duration * 60:
             self.last_timestamp = event_timestamp
             self.events_in_session += events + ","
             # if isinstance(events, list):
@@ -60,20 +60,20 @@ class Sessions:
         self.current_sessions = {}
         self.closed_sessions = []
 
-    def add_event(self, user_id, timestamp, events):
+    def add_event(self, user_id, timestamp, events, duration=30):
 
         if self.current_sessions.get(user_id) is None:
             session = UserCurrentSession(user_id, timestamp, events)
             self.current_sessions[user_id] = session
 
         else:
-            log_output = self.current_sessions[user_id].log(timestamp, events)
+            log_output = self.current_sessions[user_id].log(timestamp, events, duration)
 
             if log_output is not None:
                 self.closed_sessions.append(log_output)
 
     def close_open_sessions(self):
-        for _, open_session in self.current_sessions.items():
+        for open_session in self.current_sessions.values():
             self.closed_sessions.append(open_session.close_session())
 
     def write_to_db(self, table, db, if_exists="append", index=False):
