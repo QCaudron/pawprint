@@ -75,8 +75,11 @@ class Sessions:
     def close_open_sessions(self):
         for open_session in self.current_sessions.values():
             self.closed_sessions.append(open_session.close_session())
+        self.current_sessions = {}
 
     def write_to_db(self, table, db, if_exists="append", index=False):
         sessions_df = pd.DataFrame.from_records(self.closed_sessions)
-        sessions_df = sessions_df.sort_values("last_timestamp", ascending=True)
-        sessions_df.to_sql(table, db, if_exists=if_exists, index=index)
+        if sessions_df.shape[0] > 0:
+            sessions_df = sessions_df.sort_values("last_timestamp", ascending=True)
+            sessions_df.to_sql(table, db, if_exists=if_exists, index=index)
+        self.closed_sessions = []
