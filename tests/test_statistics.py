@@ -27,6 +27,29 @@ def test_sessions(pawprint_default_statistics_tracker):
     assert np.all(sessions.total_events == events)
 
 
+def test_sessions_in_batches(pawprint_default_statistics_tracker):
+    """Test the calculation of session durations."""
+
+    tracker = pawprint_default_statistics_tracker
+    stats = pawprint.Statistics(tracker)
+
+    # Calculate user session durations
+    stats.sessions(batch_size=2)
+
+    # Read the results
+    sessions = stats["sessions"].read()
+
+    # Expected values
+    users = np.array(["Frodo", "Gandalf", "Frodo", "Frodo"])
+    durations = np.array([5, 40, 0, 4])
+    events = np.array([6, 4, 1, 5])
+
+    print(sessions.total_events)
+    assert np.all(sessions[tracker.user_field] == users)
+    assert np.all(sessions.duration == durations)
+    assert np.all(sessions.total_events == events)
+
+
 def test_sessions_with_no_new_data(pawprint_default_statistics_tracker):
     """Test that no new sessions created with no new data"""
     tracker = pawprint_default_statistics_tracker
@@ -126,6 +149,46 @@ def test_sessions_clean_equals_true_resets(pawprint_default_statistics_tracker):
     stats.sessions(clean=True)
     sessions = stats["sessions"].read()
 
+    assert np.all(sessions[tracker.user_field] == users)
+    assert np.all(sessions.duration == durations)
+    assert np.all(sessions.total_events == events)
+    assert len(stats["sessions"].read()) == 7
+
+
+def test_sessions_with_new_data_in_batches(pawprint_default_statistics_tracker):
+    """Test that the correct number of new sessions are created with new data"""
+    tracker = pawprint_default_statistics_tracker
+    stats = pawprint.Statistics(tracker)
+
+    # Calculate user session durations
+    stats.sessions(batch_size=2)
+
+    # Read the results
+    sessions = stats["sessions"].read()
+
+    # New data
+    new_users = ["Frodo", "Sam", "Sauron", "Bilbo", "Bilbo", "Bilbo"]
+    new_timedeltas = [1005, 2000, 2010, 2100, 2101, 2102]
+    new_events = ["wanted", "helped", "looked", "joined", "fought", "wrote"]
+
+    # Yesterday morning
+    today = datetime.now()
+    yesterday = datetime(today.year, today.month, today.day, 9, 0) - timedelta(days=1)
+
+    # Write all events
+    for user, delta, event in zip(new_users, new_timedeltas, new_events):
+        tracker.write(user_id=user, timestamp=yesterday + timedelta(minutes=delta), event=event)
+
+    # Expected values
+    users = np.array(["Frodo", "Gandalf", "Frodo", "Frodo", "Sam", "Sauron", "Bilbo"])
+    durations = np.array([5, 40, 0, 5, 0, 0, 2])
+    events = np.array([6, 4, 1, 6, 1, 1, 3])
+
+    # calculate sessions again with new data
+    stats.sessions(clean=False, batch_size=2)
+    sessions = stats["sessions"].read()
+
+    print(sessions)
     assert np.all(sessions[tracker.user_field] == users)
     assert np.all(sessions.duration == durations)
     assert np.all(sessions.total_events == events)
