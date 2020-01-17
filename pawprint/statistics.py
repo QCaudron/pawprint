@@ -21,7 +21,7 @@ class Statistics(object):
 
         return Tracker(db=self.tracker.db, table="{}__{}".format(self.tracker.table, tracker))
 
-    def sessions(self, duration=30, clean=False):
+    def sessions(self, duration=30, clean=False, batch_size=100000):
         """Create a table of user sessions."""
 
         # Create a tracker for basic interaction
@@ -93,9 +93,13 @@ class Statistics(object):
                 for user, time in rows_to_delete:
                     time = pd.Timestamp(time)  # convert from numpy.datetime64 to pd.Timestamp
                     delete_session_query = "DELETE FROM {} WHERE {} = '{}' AND {} = '{}'".format(
-                        stats.table, self.tracker.user_field, user, self.tracker.timestamp_field, time
+                        stats.table,
+                        self.tracker.user_field,
+                        user,
+                        self.tracker.timestamp_field,
+                        time,
                     )
-                    pd.io.sql.execute(delete_session_query, con=self.tracker.engine)
+                    pd.io.sql.execute(delete_session_query, con=self.tracker.db)
             except ProgrammingError:
                 raise
 
@@ -103,26 +107,45 @@ class Statistics(object):
             last_entry = datetime(1900, 1, 1)
             params = {"last_entry": str(last_entry)}
 
-        # query for all events since most recent session last_timestamp
-        event_query = "SELECT * FROM {} WHERE {} > %(last_entry)s".format(
-            self.tracker.table, self.tracker.timestamp_field
+        # get first batch
+        batch_number = 0
+        events_query = "SELECT * FROM {} WHERE {} > %(last_entry)s LIMIT {} OFFSET {}".format(
+            self.tracker.table, self.tracker.timestamp_field, batch_size, batch_size * batch_number
         )
+        events = pd.read_sql(events_query, self.tracker.db, params=params)
+        while events.shape[0] > 0:
+            print("batch: ", batch_number)
+            print("num events in batch: ", events.shape[0])
+            # process events
+            for _, event_row in events.iterrows():  # loop through events
+                open_sessions.add_event(  # add events to Sessions()
+                    user_id=event_row["user_id"],
+                    timestamp=event_row["timestamp"],
+                    events=event_row["event"],
+                    duration=duration,
+                )
 
-        # get events since last_timestamp of all sessions
-        events = pd.read_sql(event_query, self.tracker.db, params=params)
-
-        for _, event_row in events.iterrows():  # loop through events
-            open_sessions.add_event(            # add events to Sessions()
-                user_id=event_row["user_id"],
-                timestamp=event_row["timestamp"],
-                events=event_row["event"],
-                duration=duration
+            # write all (sorted) closed sessions to DB
+            # resets `open_sessions.closed_sessions` to empty list
+            # leaves `open_sessions.current_sessions` as-is for next run through loop
+            open_sessions.write_to_db(
+                table=stats.table, db=self.tracker.db, if_exists="append", index=False
+            )
+            # grab next batch
+            batch_number += 1
+            events = pd.read_sql(
+                "SELECT * FROM {} WHERE {} > %(last_entry)s LIMIT {} OFFSET {}".format(
+                    self.tracker.table,
+                    self.tracker.timestamp_field,
+                    batch_size,
+                    batch_size * batch_number,
+                ),
+                self.tracker.db,
+                params=params,
             )
 
-        # close open sessions
+        # close and write any leftover open sessions
         open_sessions.close_open_sessions()
-
-        # write all (sorted) sessions to DB
         open_sessions.write_to_db(
             table=stats.table, db=self.tracker.db, if_exists="append", index=False
         )
