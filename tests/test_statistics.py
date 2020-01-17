@@ -21,8 +21,7 @@ def test_sessions(pawprint_default_statistics_tracker):
     durations = np.array([5, 40, 0, 4])
     events = np.array([6, 4, 1, 5])
 
-    print(sessions[tracker.user_field])
-
+    print(sessions.total_events)
     assert np.all(sessions[tracker.user_field] == users)
     assert np.all(sessions.duration == durations)
     assert np.all(sessions.total_events == events)
@@ -66,26 +65,28 @@ def test_sessions_with_new_data(pawprint_default_statistics_tracker):
     sessions = stats["sessions"].read()
 
     # New data
-    new_users = ["Sam", "Sauron", "Bilbo", "Bilbo", "Bilbo"]
-    new_timedeltas = [2000, 2010, 2100, 2101, 2102]
+    new_users = ["Frodo", "Sam", "Sauron", "Bilbo", "Bilbo", "Bilbo"]
+    new_timedeltas = [1005, 2000, 2010, 2100, 2101, 2102]
+    new_events = ["wanted", "helped", "looked", "joined", "fought", "wrote"]
 
     # Yesterday morning
     today = datetime.now()
     yesterday = datetime(today.year, today.month, today.day, 9, 0) - timedelta(days=1)
 
     # Write all events
-    for user, delta in zip(new_users, new_timedeltas):
-        tracker.write(user_id=user, timestamp=yesterday + timedelta(minutes=delta))
+    for user, delta, event in zip(new_users, new_timedeltas, new_events):
+        tracker.write(user_id=user, timestamp=yesterday + timedelta(minutes=delta), event=event)
 
     # Expected values
     users = np.array(["Frodo", "Gandalf", "Frodo", "Frodo", "Sam", "Sauron", "Bilbo"])
-    durations = np.array([5, 40, 0, 4, 0, 0, 2])
-    events = np.array([6, 4, 1, 5, 1, 1, 3])
+    durations = np.array([5, 40, 0, 5, 0, 0, 2])
+    events = np.array([6, 4, 1, 6, 1, 1, 3])
 
     # calculate sessions again with new data
     stats.sessions(clean=False)
     sessions = stats["sessions"].read()
 
+    print(sessions)
     assert np.all(sessions[tracker.user_field] == users)
     assert np.all(sessions.duration == durations)
     assert np.all(sessions.total_events == events)
@@ -106,14 +107,15 @@ def test_sessions_clean_equals_true_resets(pawprint_default_statistics_tracker):
     # New data
     new_users = ["Sam", "Sauron", "Bilbo", "Bilbo", "Bilbo"]
     new_timedeltas = [2000, 2010, 2100, 2101, 2102]
+    new_events = ["helped", "looked", "joined", "fought", "wrote"]
 
     # Yesterday morning
     today = datetime.now()
     yesterday = datetime(today.year, today.month, today.day, 9, 0) - timedelta(days=1)
 
     # Write all events
-    for user, delta in zip(new_users, new_timedeltas):
-        tracker.write(user_id=user, timestamp=yesterday + timedelta(minutes=delta))
+    for user, delta, event in zip(new_users, new_timedeltas, new_events):
+        tracker.write(user_id=user, timestamp=yesterday + timedelta(minutes=delta), event=event)
 
     # Expected values
     users = np.array(["Frodo", "Gandalf", "Frodo", "Frodo", "Sam", "Sauron", "Bilbo"])
@@ -221,17 +223,3 @@ def test_engagement_append_mode(pawprint_default_statistics_tracker):
     stickiness = stats["engagement"].read()
     assert len(stickiness) == 2
     assert len(stickiness.columns) == 9
-
-
-def test_event_session_map_table_created(pawprint_default_statistics_tracker):
-    tracker = pawprint_default_statistics_tracker
-    stats = pawprint.Statistics(tracker)
-    stats.sessions()
-
-    map_df = stats["event_session_map"].read()
-
-    assert len(map_df) == len(tracker.read())
-    assert all(
-        col in map_df.columns for col in ["event_id", "user_id", "timestamp", "session_timestamp"]
-    )
-    assert map_df["timestamp"].max() >= map_df["session_timestamp"].max()
