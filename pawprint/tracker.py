@@ -1,3 +1,4 @@
+import logging
 from collections import OrderedDict
 import json
 from datetime import datetime
@@ -34,10 +35,11 @@ class Tracker(object):
                 ]
             )
         else:  # If a schema is passed, ensure it's an ordered dict
-            if not isinstance(config["schema"], OrderedDict) and isinstance(
-                config["schema"], dict
-            ):
+            if not isinstance(config["schema"], OrderedDict) and isinstance(config["schema"], dict):
                 config["schema"] = OrderedDict(config["schema"])
+
+        if "logger" not in config:
+            config["logger"] = logging.getLogger(__name__)
 
         # Save the database properties
         self.db = config.get("db", None)
@@ -60,8 +62,7 @@ class Tracker(object):
 
         # Build a query from the schema
         fields = ", ".join(
-            "{} {}".format(field_name, field_type)
-            for field_name, field_type in self.schema.items()
+            "{} {}".format(field_name, field_type) for field_name, field_type in self.schema.items()
         )
         query = "CREATE TABLE {} ({})".format(self.table, fields)
 
@@ -109,16 +110,14 @@ class Tracker(object):
 
         # If the write fails, raise the exception
         except Exception as exception:
-            if (
-                self.db is not None
-            ):  # If db is None, fail silently. Otherwise, raise the error
+            if self.db is not None:  # If db is None, fail silently. Otherwise, raise the error
 
                 # If we have a logger, log the error
                 if self.logger:
                     # add vars to the query string
                     query = query.replace("%s", "'{}'").format(*values)
                     self.logger.warning(
-                        "pawprint failed to write. Table: {}. Query: {}. Exception: {} ({})".format(
+                        "pawprint: pawprint failed to write. Table: {}. Query: {}. Exception: {} ({})".format(
                             self.table, query, exception, exception.args
                         )
                     )
@@ -137,30 +136,22 @@ class Tracker(object):
         # Parse the conditions
         conditionals_query = self._parse_conditionals(**conditionals)
 
-        query = "SELECT {} FROM {} {}".format(
-            field_query, self.table, conditionals_query
-        )
+        query = "SELECT {} FROM {} {}".format(field_query, self.table, conditionals_query)
 
         if "DISTINCT" not in query:
             query += " ORDER BY {}".format(self.timestamp_field)
 
         return pd.read_sql(query, self.db)
 
-    def count(
-        self, count_field="*", resolution="day", start=None, end=None, **conditionals
-    ):
+    def count(self, count_field="*", resolution="day", start=None, end=None, **conditionals):
         """Count events of a given type."""
-        return self._aggregate(
-            "COUNT", resolution, start, end, count_field, **conditionals
-        )
+        return self._aggregate("COUNT", resolution, start, end, count_field, **conditionals)
 
     def sum(self, sum_field, resolution="day", start=None, end=None, **conditionals):
         """Sum numerical values of events of a given type."""
         return self._aggregate("SUM", resolution, start, end, sum_field, **conditionals)
 
-    def average(
-        self, avg_field, resolution="day", start=None, end=None, **conditionals
-    ):
+    def average(self, avg_field, resolution="day", start=None, end=None, **conditionals):
         """Average events of a given type."""
         return self._aggregate("AVG", resolution, start, end, avg_field, **conditionals)
 
@@ -168,9 +159,7 @@ class Tracker(object):
         """User-defined SQL query."""
         return pd.io.sql.execute(query, self.engine)
 
-    def _aggregate(
-        self, agg_operation, resolution, start, end, agg_field, **conditionals
-    ):
+    def _aggregate(self, agg_operation, resolution, start, end, agg_field, **conditionals):
         """
         Aggregate events into a dataframe, between a date range, at a given temporal resolution.
         """
@@ -186,9 +175,7 @@ class Tracker(object):
         else:
             agg_query = "{aggregate}(({field})::float)".format(
                 aggregate=agg_operation,
-                field=self._parse_fields(
-                    agg_field, skip_alias=True, json_aggregate=True
-                ),
+                field=self._parse_fields(agg_field, skip_alias=True, json_aggregate=True),
             )
 
         # Parse conditionals; replace WHERE with AND
@@ -270,9 +257,7 @@ class Tracker(object):
             elif isinstance(value, list):  # for the IN operator
                 return "({})".format(", ".join(["'{}'".format(i) for i in value]))
             else:
-                return "'{}'".format(
-                    value
-                )  # other things probably need to be in quotes
+                return "'{}'".format(value)  # other things probably need to be in quotes
 
         if len(values) == 1:
             return sqlsafe(values[0])
@@ -331,16 +316,10 @@ class Tracker(object):
         return "WHERE {}".format(" AND ".join(conditions_list))
 
     def __repr__(self):
-        return "pawprint.Tracker on table '{}' and database '{}'".format(
-            self.table, self.db
-        )
+        return "pawprint.Tracker on table '{}' and database '{}'".format(self.table, self.db)
 
     def __str__(self):
-        return (
-            "pawprint Tracker object.\n"
-            "db : {}\n"
-            "table : {}".format(self.db, self.table)
-        )
+        return "pawprint Tracker object.\n" "db : {}\n" "table : {}".format(self.db, self.table)
 
 
 # TODO : strip "event" requirement from aggregates

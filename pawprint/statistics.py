@@ -32,12 +32,12 @@ class Statistics(object):
         # If we're starting clean, drop the database table containint existing sessions
         if clean:
             stats.drop_table()
-            self.tracker.logger.info("Dropped existing sessions table")
+            self.tracker.logger.info("pawprint: Dropped existing sessions table")
 
         # This try statement contains a few SQL queries; if any of them fail with a
         # ProgrammingError, the try is exited and the sessions will be rebuilt from scratch.
         try:
-            self.tracker.logger.info("Checking if there are new events since last session")
+            self.tracker.logger.info("pawprint: Checking if there are new events since last session")
 
             # Try to get the time of the very last event stored in the database
             # If the query fails, sessions will be built from scratch
@@ -48,7 +48,7 @@ class Statistics(object):
                 self.tracker.db,
             ).loc[0, "last_timestamp"]
 
-            self.tracker.logger.info("Last entry set to {}".format(last_entry))
+            self.tracker.logger.info("pawprint: Last entry set to {}".format(last_entry))
 
             # All events after this time are new to us, so construct the query
             # to get the list of unique users since this last event
@@ -64,7 +64,7 @@ class Statistics(object):
 
             # If there are no users, exit because there's nothing to update
             if len(unique_users) == 0:
-                self.tracker.logger.info("No users since last_entry. Exiting")
+                self.tracker.logger.info("pawprint: No users since last_entry. Exiting")
                 return
 
             # Construct a PostgreSQL-friendly string representing the list of unique users
@@ -105,7 +105,7 @@ class Statistics(object):
 
             # Delete the last recorded sessions from the sessions table
             try:
-                self.tracker.logger.info("Attempting to remove users' last sessions from DB table.")
+                self.tracker.logger.info("pawprint: Attempting to remove users' last sessions from DB table.")
 
                 for user, time in rows_to_delete:
                     time = pd.Timestamp(time)
@@ -117,7 +117,7 @@ class Statistics(object):
                         time,
                     )
                     pd.io.sql.execute(delete_session_query, con=self.tracker.db)
-                self.tracker.logger.info("Users' last session removed from sessions DB table.")
+                self.tracker.logger.info("pawprint: Users' last session removed from sessions DB table.")
             except ProgrammingError:
                 raise
 
@@ -159,11 +159,11 @@ class Statistics(object):
             # Write all (sorted) closed sessions to database
             # This resets `open_sessions.closed_sessions` to empty list
             # and leaves `open_sessions.current_sessions` as-is for next run through loop
-            self.tracker.logger.info("Batch {}: writing events".format(batch_number))
+            self.tracker.logger.info("pawprint: Batch {}: writing events".format(batch_number))
             open_sessions.write_to_db(
                 table=stats.table, db=self.tracker.db, if_exists="append", index=False
             )
-            self.tracker.logger.info("Batch {}: events written to DB".format(batch_number))
+            self.tracker.logger.info("pawprint: Batch {}: events written to DB".format(batch_number))
 
             # Grab the next batch of events from the database
             batch_number += 1
@@ -179,14 +179,14 @@ class Statistics(object):
                 params=params,
             )
 
-        self.tracker.logger.info("Event logging loop exited")
+        self.tracker.logger.info("pawprint: Event logging loop exited")
         # Close and write any leftover open sessions
         open_sessions.close_open_sessions()
-        self.tracker.logger.info("Closed all remaining open sessions")
+        self.tracker.logger.info("pawprint: Closed all remaining open sessions")
         open_sessions.write_to_db(
             table=stats.table, db=self.tracker.db, if_exists="append", index=False
         )
-        self.tracker.logger.info("Remaining sessions written to DB")
+        self.tracker.logger.info("pawprint: Remaining sessions written to DB")
 
     def engagement(self, clean=False, start=None, min_sessions=3):
         """Calculates the daily and monthly average users, and the stickiness as the ratio."""
