@@ -79,7 +79,7 @@ def test_instantiate_tracker_from_dot_file(drop_tracker_test_table):
     # Ensure all the entries are as they should be
     assert tracker.db == "postgresql:///little_bean_toes"
     assert tracker.table is None
-    assert tracker.logger is None
+    # assert tracker.logger is None
     assert tracker.json_field == "boop"  # field present in dotfile but overwritten in init
 
     os.remove(".pawprint")
@@ -424,7 +424,7 @@ def test_nonsilent_write_errors(error_logger):
         print(logs[3])
 
     assert len(logs) == 6
-    assert logs[0].startswith("pawprint failed to write.")
+    assert logs[0].startswith("pawprint: pawprint failed to write.")
     assert "Table: None. Query: INSERT INTO None () VALUES ();" in logs[0]
     assert "Query: INSERT INTO None (event) VALUES ('going_to_fail')" in logs[3]
 
