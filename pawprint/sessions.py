@@ -3,7 +3,7 @@ import pandas as pd
 
 class UserCurrentSession:
     """
-    One user's current session. This stores the start and end of the 
+    One user's current session. This stores the start and end of the
     session, the number of events in the session, and the name of the event.
     """
 
@@ -32,7 +32,7 @@ class UserCurrentSession:
         """
 
         # If the event is within the session
-        if (event_timestamp - self.last_timestamp).seconds < duration * 60:
+        if (event_timestamp - self.last_timestamp).total_seconds() < duration * 60:
 
             # Update the current session's last event time
             # and add the event to the list of events
@@ -56,7 +56,7 @@ class UserCurrentSession:
     def close_session(self):
         """
         The current session has come to a close when we received an event
-        outside of the max inter-event duration. As such, construct a 
+        outside of the max inter-event duration. As such, construct a
         payload that contains information about this session, for later storage.
         """
         return {
@@ -97,9 +97,7 @@ class Sessions:
 
         # Otherwise, log the event to their existing session
         else:
-            log_output = self.current_sessions[user_id].log_event(
-                timestamp, events, duration
-            )
+            log_output = self.current_sessions[user_id].log_event(timestamp, events, duration)
 
             # If they had a previous session, this event may be far enough in time from
             # the last event to close that previous session. If so, take the last
