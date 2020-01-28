@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="pawprint",
-    version="2.1.0",
+    version="2.1.1",
     description="A flexible event tracker for rapid analysis.",
     long_description=long_description,
     long_description_content_type="text/markdown",
